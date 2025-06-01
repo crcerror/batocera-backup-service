@@ -3,7 +3,7 @@
 # ------------------------------- CONFIG BEGIN --------------------------------
 
 # The location of Batocera data on your cloud storage.
-destDir=/Games/Batocera
+destDir=/Batocera
 
 # Waiting time between two backups in seconds.
 # The below configuration means that the service will do a backup every minute.
@@ -13,6 +13,16 @@ waitSeconds=60
 # If set to false, only logs since the last start of the service are kept.
 keepLogs=false
 
+# The name of the created backup-service, per default it is backup, but you should
+# enter here the rclone configuration remote you want to use
+backup=koofr
+
+# Which way you want to use for automated setup sync: host -/> cloud
+# if you want to mirror files then better use bisync: host <-> cloud
+# if you want to copy files 2 host then use cmd copy: host --> cloud
+# So syncMethod can be sync, bisync, copy
+syncMethod=bisync
+
 # -------------------------------- CONFIG END ---------------------------------
 
 runFile=/var/run/backup-service
@@ -20,19 +30,48 @@ logFile=/var/log/backup-service.log
 
 # This needs to be set explicitly, because $HOME is not set when the service is started by Batocera.
 export RCLONE_CONFIG=/userdata/system/.config/rclone/rclone.conf
+export RCLONE_CACHE=/userdata/system/.config/rclone
 
 manual() {
-    echo "> CONFIG sync" ------------------------------------------------------------------------------------
-    rclone sync /userdata/system/batocera.conf backup:${destDir}/system --progress
 
-    echo "> SAVES sync" -------------------------------------------------------------------------------------
-    rclone sync /userdata/saves backup:${destDir}/saves --exclude "flatpak/**" --progress
+    [[ "$1" == "backup" || "$1" == "restore" ]] || { echo "Usage: $0 manual <backup/restore>"; return 1; }
 
-    echo "> ROMS sync" --------------------------------------------------------------------------------------
-    rclone sync /userdata/roms backup:${destDir}/roms --exclude "flatpak/**" --progress
+    local i
+    echo "Attention: This will overwrite your local or remote data!"
+    read -p "Do you want to $1 your data? (y/n): " i
 
-    echo "> BIOS sync" --------------------------------------------------------------------------------------
-    rclone sync /userdata/bios backup:${destDir}/bios --progress
+    case "$i" in
+        y|Y) true ;;
+        *)   echo "Aborted!"; return 1
+    esac
+
+    local DESCRIPTION=("CONFIG" "SAVES" "ROMS" "BIOS")
+
+    local PATH_LOCAL=("/userdata/system/batocera.conf"
+                       "/userdata/saves"
+                       "/userdata/roms"
+                       "/userdata/bios")
+
+    local PATH_REMOTE=("${backup}:${destDir}/system"
+                       "${backup}:${destDir}/saves"
+                       "${backup}:${destDir}/roms"
+                       "${backup}:${destDir}/bios")
+
+    case "$1" in
+        backup)
+            for i in ${!DESCRIPTION[@]}; do
+                printf "%-25s %s %20s %s\n" "> sync local:${DESCRIPTION[$i]}" "->" "remote:${backup}" "------------------------------------------------------------------------------------"
+                #rclone sync "${PATH_LOCAL[$i]}" "${PATH_REMOTE[$i]}" --exclude "flatpak/**" --progress
+            done
+        ;;
+        restore)
+            for i in ${!DESCRIPTION[@]}; do
+                printf "%-25s %s %20s %s\n" "> sync remote:${backup}" "->" "local:${DESCRIPTION[$i]}" "------------------------------------------------------------------------------------"
+                #rclone sync "${PATH_REMOTE[$i]}" "${PATH_LOCAL[$i]}" --exclude "flatpak/**" --progress
+            done
+        ;;
+    esac
+
 }
 
 start() {
@@ -45,14 +84,39 @@ start() {
     timeStamp="$(date)"
     echo -e "\n--- SERVICE START - [${timeStamp}] ---\n" >>${logFile}
 
-    while test -e ${runFile}; do
-        sleep ${waitSeconds}
-        rclone sync /userdata/saves backup:${destDir}/saves --exclude "flatpak/**" --log-file ${logFile} --log-level INFO
-    done
+
+    case "${syncMethod}" in
+    sync)
+        while test -e ${runFile}; do
+            sleep ${waitSeconds}
+            rclone sync /userdata/saves ${backup}:${destDir}/saves --exclude "flatpak/**" --log-file ${logFile} --log-level INFO
+        done
+    ;;
+    bisync)
+        rclone bisync /userdata/saves ${backup}:${destDir}/saves --exclude "flatpak/**" --dry-run
+        ret=$?
+        if [[ $ret -ne 0 ]]; then
+            rclone bisync /userdata/saves ${backup}:${destDir}/saves --exclude "flatpak/**" --compare size,modtime,checksum --resync
+        fi
+        rclone bisync /userdata/saves ${backup}:${destDir}/saves --exclude "flatpak/**" --compare size,modtime,checksum
+    ;;
+    copy)
+        while test -e ${runFile}; do
+            sleep ${waitSeconds}
+            rclone copy /userdata/saves ${backup}:${destDir}/saves --exclude "flatpak/**" --log-file ${logFile} --log-level INFO
+        done               
+    ;;
+    esac
 }
 
 stop() {
     rm -f ${runFile}
+    #bisync only on stop condition, because it is longer
+    case "${syncMethod}" in
+    bisync)
+        rclone bisync /userdata/saves ${backup}:${destDir}/saves --exclude "flatpak/**" --compare size,modtime,checksum
+    ;;
+    esac
 }
 
 status() {
@@ -63,9 +127,9 @@ status() {
     fi
 }
 
-case "$1" in
+case "${1,,}" in
     manual)
-        manual
+        manual "${2,,}"
         ;;
     start)
         start &
@@ -77,6 +141,9 @@ case "$1" in
         status
         ;;
     *)
-        echo "Usage: https://gitlab.com/peterbozso/batocera-backup-service"
-        ;;
+        echo "Usage ${0} <start/stop/status>"
+        echo "Usage ${0} manual <backup/restore>"
+        echo
+        echo "Initial idea: https://gitlab.com/peterbozso/batocera-backup-service"
+        echo "Updated cyperghost/crcerror"
 esac
