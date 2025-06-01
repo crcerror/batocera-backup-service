@@ -30,7 +30,6 @@ logFile=/var/log/backup-service.log
 
 # This needs to be set explicitly, because $HOME is not set when the service is started by Batocera.
 export RCLONE_CONFIG=/userdata/system/.config/rclone/rclone.conf
-export RCLONE_CACHE=/userdata/system/.config/rclone
 
 manual() {
 
@@ -98,7 +97,7 @@ start() {
         if [[ $ret -ne 0 ]]; then
             rclone bisync /userdata/saves ${backup}:${destDir}/saves --exclude "flatpak/**" --compare size,modtime,checksum --log-file ${logFile} --log-level INFO --resync
         fi
-        rclone bisync /userdata/saves ${backup}:${destDir}/saves --exclude "flatpak/**" --compare size,modtime,checksum
+        rclone bisync /userdata/saves ${backup}:${destDir}/saves --exclude "flatpak/**" --compare size,modtime,checksum --log-file ${logFile} --log-level INFO
     ;;
     copy)
         while test -e ${runFile}; do
