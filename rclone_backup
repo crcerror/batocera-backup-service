@@ -1,0 +1,82 @@
+#!/bin/bash
+
+# ------------------------------- CONFIG BEGIN --------------------------------
+
+# The location of Batocera data on your cloud storage.
+destDir=/Games/Batocera
+
+# Waiting time between two backups in seconds.
+# The below configuration means that the service will do a backup every minute.
+waitSeconds=60
+
+# If set to true, logs from all runs of the service are preserved.
+# If set to false, only logs since the last start of the service are kept.
+keepLogs=false
+
+# -------------------------------- CONFIG END ---------------------------------
+
+runFile=/var/run/backup-service
+logFile=/var/log/backup-service.log
+
+# This needs to be set explicitly, because $HOME is not set when the service is started by Batocera.
+export RCLONE_CONFIG=/userdata/system/.config/rclone/rclone.conf
+
+manual() {
+    echo "> CONFIG sync" ------------------------------------------------------------------------------------
+    rclone sync /userdata/system/batocera.conf backup:${destDir}/system --progress
+
+    echo "> SAVES sync" -------------------------------------------------------------------------------------
+    rclone sync /userdata/saves backup:${destDir}/saves --exclude "flatpak/**" --progress
+
+    echo "> ROMS sync" --------------------------------------------------------------------------------------
+    rclone sync /userdata/roms backup:${destDir}/roms --exclude "flatpak/**" --progress
+
+    echo "> BIOS sync" --------------------------------------------------------------------------------------
+    rclone sync /userdata/bios backup:${destDir}/bios --progress
+}
+
+start() {
+    touch ${runFile}
+
+    if [ "$keepLogs" = false ]; then
+        rm -f ${logFile}
+    fi
+
+    timeStamp="$(date)"
+    echo -e "\n--- SERVICE START - [${timeStamp}] ---\n" >>${logFile}
+
+    while test -e ${runFile}; do
+        sleep ${waitSeconds}
+        rclone sync /userdata/saves backup:${destDir}/saves --exclude "flatpak/**" --log-file ${logFile} --log-level INFO
+    done
+}
+
+stop() {
+    rm -f ${runFile}
+}
+
+status() {
+    if test -e ${runFile}; then
+        echo "Backup service is running. Logs: ${logFile}"
+    else
+        echo "Backup service is not running."
+    fi
+}
+
+case "$1" in
+    manual)
+        manual
+        ;;
+    start)
+        start &
+        ;;
+    stop)
+        stop
+        ;;
+    status)
+        status
+        ;;
+    *)
+        echo "Usage: https://gitlab.com/peterbozso/batocera-backup-service"
+        ;;
+esac
