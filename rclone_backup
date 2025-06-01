@@ -61,13 +61,13 @@ manual() {
         backup)
             for i in ${!DESCRIPTION[@]}; do
                 printf "%-25s %s %20s %s\n" "> sync local:${DESCRIPTION[$i]}" "->" "remote:${backup}" "------------------------------------------------------------------------------------"
-                #rclone sync "${PATH_LOCAL[$i]}" "${PATH_REMOTE[$i]}" --exclude "flatpak/**" --progress
+                rclone sync "${PATH_LOCAL[$i]}" "${PATH_REMOTE[$i]}" --exclude "flatpak/**" --progress
             done
         ;;
         restore)
             for i in ${!DESCRIPTION[@]}; do
                 printf "%-25s %s %20s %s\n" "> sync remote:${backup}" "->" "local:${DESCRIPTION[$i]}" "------------------------------------------------------------------------------------"
-                #rclone sync "${PATH_REMOTE[$i]}" "${PATH_LOCAL[$i]}" --exclude "flatpak/**" --progress
+                rclone sync "${PATH_REMOTE[$i]}" "${PATH_LOCAL[$i]}" --exclude "flatpak/**" --progress
             done
         ;;
     esac
@@ -96,7 +96,7 @@ start() {
         rclone bisync /userdata/saves ${backup}:${destDir}/saves --exclude "flatpak/**" --dry-run
         ret=$?
         if [[ $ret -ne 0 ]]; then
-            rclone bisync /userdata/saves ${backup}:${destDir}/saves --exclude "flatpak/**" --compare size,modtime,checksum --resync
+            rclone bisync /userdata/saves ${backup}:${destDir}/saves --exclude "flatpak/**" --compare size,modtime,checksum --log-file ${logFile} --log-level INFO --resync
         fi
         rclone bisync /userdata/saves ${backup}:${destDir}/saves --exclude "flatpak/**" --compare size,modtime,checksum
     ;;
@@ -114,7 +114,7 @@ stop() {
     #bisync only on stop condition, because it is longer
     case "${syncMethod}" in
     bisync)
-        rclone bisync /userdata/saves ${backup}:${destDir}/saves --exclude "flatpak/**" --compare size,modtime,checksum
+        rclone bisync /userdata/saves ${backup}:${destDir}/saves --exclude "flatpak/**" --compare size,modtime,checksum --log-file ${logFile} --log-level INFO
     ;;
     esac
 }
@@ -145,5 +145,4 @@ case "${1,,}" in
         echo "Usage ${0} manual <backup/restore>"
         echo
         echo "Initial idea: https://gitlab.com/peterbozso/batocera-backup-service"
-        echo "Updated cyperghost/crcerror"
 esac
