@@ -6,7 +6,11 @@ It is for uploading user data to cloud storage, so in case of a hardware failure
 
 It has two modes:
 
-* [Automatic](#automatic): using Batocera's [services](https://wiki.batocera.org/launch_a_script#services) feature, it periodically uploads your saves in the background.
+* [Automatic](#automatic): using Batocera's [services](https://wiki.batocera.org/launch_a_script#services) feature, it periodically uploads your saves in the background, if you set `sync` or `copy`-mode. If you set `bisync` as working mode, then the sync is performed early in ES start and after you shutdown Batocera. Background is here that the process of bisyncing is much slower then a rare copy or sync of files only.
+  * **copy**: All files from the local will copied to the host and never will be deleted
+  * **sync**: All files from the local will be mirrored to the host, in doubts you lose your cloud backup if you setup a new mashine
+  * **bisync**: All files will be copied from the local to the host and vice versa. You can also sync with a second mashine, but therefore use `--resync` flag **BEFORE** you fire up the script automatic!
+    
 * [Manual](#manual): by running the script manually, you can do a full backup of your data.
 
 It's tested and works with Batocera [v40](https://batocera.org/changelog) and rclone's [OneDrive provider](https://rclone.org/onedrive/). Other providers very likely work just as well, they just haven't been tested by me. Open an issue if you run into one that doesn't work.
@@ -20,17 +24,17 @@ It's tested and works with Batocera [v40](https://batocera.org/changelog) and rc
 
 ### Can I use this script to keep Batocera installs on multiple devices in sync?
 
-No. rclone can upload **or** download files to/from a cloud storage. This script only does the former. rclone's [bidirectional sync](https://rclone.org/bisync/) feature is currently in beta. As soon as that changes, this script will be most likely updated to take advantage of it. Until then, [Syncthing](https://wiki.batocera.org/syncthing) is the best solution for this use case.
+Yes. rclone's [bidirectional sync](https://rclone.org/bisync/) feature is currently in beta state but it works stable here. But you have to assure to use `--dry-run` before you perform any productive tests. [Syncthing](https://wiki.batocera.org/syncthing) is the best solution for this use case.
 
 ### Can I use this script to back up to the same cloud storage from multiple devices?
 
-Yes. If you'd like to do that, make sure you configure the [destDir](/backup#L6) variable to point to a different directory for each device to avoid collisions. Otherwise they'd overwrite each other's files that are named the same.
+Yes. If you'd like to do that, make sure you configure the [destDir](/rclone_backup#L9) variable to point to a different directory for each device to avoid collisions. Otherwise they'd overwrite each other's files that are named the same.
 
 ## Setup
 
-1. Copy the [backup](/backup) script to your Batocera installation's `/userdata/system/services` directory.
+1. Copy the [backup](/rclone_backup) script to your Batocera installation's `/userdata/system/services` directory.
 2. Modify the [configuration](/backup#L3) at the top of the file according to your needs.
-3. Follow the steps in one of the methods [here](https://rclone.org/remote_setup/) and set up a remote with the name `backup`.
+3. Follow the steps in one of the methods [here](https://rclone.org/remote_setup/) and set up a remote. The remote name is automatically detected as first entry into rclones config file.
 4. Enable the service with `batocera-services enable backup`.
 5. Restart Batocera or use `batocera-services start backup`.
 
@@ -42,12 +46,10 @@ Refer to the [Batocera wiki](https://wiki.batocera.org/launch_a_script#services)
 
 ### Manual
 
-To do a manual backup: `bash services/backup manual`
+To do a manual backup or restore: `bash services/rclone_backup manual <backup/restore>`
 
-This does a full backup including not just saves, but your configuration (`batocera.conf`), ROMs and BIOS files. Use this after modifying any of those.
+This does a full backup or restore including not just saves, but your configuration (`batocera.conf`), ROMs and BIOS files. Use this after modifying any of those.
 
-## Development
+### Original Author
+Péter Bozsó - https://gitlab.com/peterbozso/batocera-backup-service/
 
-Open this repository in VS Code and install the [workspace recommended extensions](https://code.visualstudio.com/docs/editor/extension-marketplace#_workspace-recommended-extensions), so the script can be [automatically copied](/.vscode/settings.json#L6) to the Batocera machine on save.
-
-Local dependencies that need to be installed for the copying to work: `sshpass`, `scp`.
